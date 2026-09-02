@@ -765,6 +765,7 @@ export class TunnelScene {
     // 1. Update Paddles
     this.playerPaddleMesh.position.set(p.x, p.y, p.z);
     this.opponentPaddleMesh.position.set(op.x, op.y, op.z);
+    this.opponentPaddleMesh.scale.set(op.width / 3.2, op.height / 3.0, 1.0);
 
     // Subtly tilt player paddle with swing velocity
     const maxTilt = 0.25;
