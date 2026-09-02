@@ -7,6 +7,8 @@
 ![Web Audio](https://img.shields.io/badge/Web_Audio_API-Procedural-ff007f?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
+### 🕹️ [**Play Online Now (GitHub Pages)**](https://ramonlinares.github.io/GemPingPong/)
+
 ---
 
 ## 🎮 Features
