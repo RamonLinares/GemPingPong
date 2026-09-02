@@ -468,30 +468,133 @@ export class TunnelScene {
     this.trailMesh = new THREE.Line(trailGeom, this.trailMaterial);
     this.scene.add(this.trailMesh);
 
-    // 4 Subtle Wall Projection Indicators (Left, Right, Floor, Ceiling) for 3D depth perception
-    const projGeom = new THREE.RingGeometry(0.08, 0.32, 16);
+    // ==========================================
+    // 3D DEPTH PERCEPTION SYSTEM
+    // ==========================================
+    const hw = this.physics.halfW;
+    const hh = this.physics.halfH;
+
+    // 1. Gliding Depth Ring (Square wireframe at current ball Z depth)
+    this.depthSliceGroup = new THREE.Group();
+    const slicePoints = [
+      new THREE.Vector3(-hw, -hh, 0),
+      new THREE.Vector3(hw, -hh, 0),
+      new THREE.Vector3(hw, hh, 0),
+      new THREE.Vector3(-hw, hh, 0),
+      new THREE.Vector3(-hw, -hh, 0)
+    ];
+    this.depthSliceMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ff41,
+      transparent: true,
+      opacity: 0.55,
+      linewidth: 2
+    });
+    this.depthSliceMesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(slicePoints), this.depthSliceMaterial);
+    this.depthSliceGroup.add(this.depthSliceMesh);
+
+    // 4 Inner ticks on the moving depth slice
+    this.sliceTickMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 });
+    const tHalf = 0.7;
+    // Top tick
+    this.depthSliceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-tHalf, hh - 0.05, 0), new THREE.Vector3(tHalf, hh - 0.05, 0)]), this.sliceTickMaterial));
+    // Bottom tick
+    this.depthSliceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-tHalf, -hh + 0.05, 0), new THREE.Vector3(tHalf, -hh + 0.05, 0)]), this.sliceTickMaterial));
+    // Left tick
+    this.depthSliceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-hw + 0.05, -tHalf, 0), new THREE.Vector3(-hw + 0.05, tHalf, 0)]), this.sliceTickMaterial));
+    // Right tick
+    this.depthSliceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(hw - 0.05, -tHalf, 0), new THREE.Vector3(hw - 0.05, tHalf, 0)]), this.sliceTickMaterial));
+    this.scene.add(this.depthSliceGroup);
+
+    // 2. Vertical Laser Drop Line from Ball to Floor Shadow
+    const dropLineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]);
+    this.dropLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ff41,
+      transparent: true,
+      opacity: 0.65
+    });
+    this.dropLine = new THREE.Line(dropLineGeom, this.dropLineMaterial);
+    this.scene.add(this.dropLine);
+
+    // 3. Dynamic Floor Shadow (Dark core + glowing neon halo)
+    this.floorShadowGroup = new THREE.Group();
+    this.floorShadowCoreMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.7,
+      side: THREE.DoubleSide
+    });
+    this.floorShadowCore = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), this.floorShadowCoreMat);
+    this.floorShadowGroup.add(this.floorShadowCore);
+
+    this.floorShadowHaloMat = new THREE.MeshBasicMaterial({
+      color: 0x00ff41,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide
+    });
+    this.floorShadowHalo = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.75, 24), this.floorShadowHaloMat);
+    this.floorShadowGroup.add(this.floorShadowHalo);
+    this.floorShadowGroup.rotation.x = -Math.PI / 2;
+    this.scene.add(this.floorShadowGroup);
+
+    // 4. Wall Projection Indicators (Left, Right, Ceiling)
+    const projRingGeom = new THREE.RingGeometry(0.2, 0.65, 24);
+    const projCoreGeom = new THREE.CircleGeometry(0.25, 24);
+
     this.projMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ff41,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.45,
       side: THREE.DoubleSide
     });
 
-    this.projLeft = new THREE.Mesh(projGeom, this.projMaterial);
+    this.projLeft = new THREE.Group();
+    this.projLeft.add(new THREE.Mesh(projCoreGeom, this.floorShadowCoreMat));
+    this.projLeft.add(new THREE.Mesh(projRingGeom, this.projMaterial));
     this.projLeft.rotation.y = Math.PI / 2;
     this.scene.add(this.projLeft);
 
-    this.projRight = new THREE.Mesh(projGeom, this.projMaterial);
+    this.projRight = new THREE.Group();
+    this.projRight.add(new THREE.Mesh(projCoreGeom, this.floorShadowCoreMat));
+    this.projRight.add(new THREE.Mesh(projRingGeom, this.projMaterial));
     this.projRight.rotation.y = -Math.PI / 2;
     this.scene.add(this.projRight);
 
-    this.projBottom = new THREE.Mesh(projGeom, this.projMaterial);
-    this.projBottom.rotation.x = -Math.PI / 2;
-    this.scene.add(this.projBottom);
-
-    this.projTop = new THREE.Mesh(projGeom, this.projMaterial);
+    this.projTop = new THREE.Group();
+    this.projTop.add(new THREE.Mesh(projCoreGeom, this.floorShadowCoreMat));
+    this.projTop.add(new THREE.Mesh(projRingGeom, this.projMaterial));
     this.projTop.rotation.x = Math.PI / 2;
     this.scene.add(this.projTop);
+
+    // 5. Holographic Arrival Landing Reticle on Player Plane (Z = 0)
+    // Shows WHERE the ball will arrive and has a CONTRACTING ring showing WHEN it will arrive!
+    this.arrivalGroup = new THREE.Group();
+    this.arrivalMat = new THREE.MeshBasicMaterial({
+      color: 0x00f2fe,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide
+    });
+    // Target inner crosshair
+    const targetRing = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.4, 24), this.arrivalMat);
+    this.arrivalGroup.add(targetRing);
+    const cross1 = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.6, 0, 0), new THREE.Vector3(0.6, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x00f2fe }));
+    const cross2 = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -0.6, 0), new THREE.Vector3(0, 0.6, 0)]), new THREE.LineBasicMaterial({ color: 0x00f2fe }));
+    this.arrivalGroup.add(cross1);
+    this.arrivalGroup.add(cross2);
+
+    // Outer contracting timing ring (scales down with distance to impact!)
+    this.timingRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfeca57,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    this.timingRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.05, 32), this.timingRingMat);
+    this.arrivalGroup.add(this.timingRing);
+
+    this.arrivalGroup.position.set(0, 0, 0.05);
+    this.scene.add(this.arrivalGroup);
   }
 
   createParticles() {
@@ -648,6 +751,10 @@ export class TunnelScene {
     this.trailMaterial.color.set(t.trailColor);
     this.sparkMaterial.color.set(t.wireColor);
     if (this.projMaterial) this.projMaterial.color.set(t.wireColor);
+    if (this.depthSliceMaterial) this.depthSliceMaterial.color.set(t.ringColor);
+    if (this.dropLineMaterial) this.dropLineMaterial.color.set(t.wireColor);
+    if (this.floorShadowHaloMat) this.floorShadowHaloMat.color.set(t.wireColor);
+    if (this.arrivalMat) this.arrivalMat.color.set(t.playerColor);
   }
 
   update(dt) {
@@ -664,24 +771,86 @@ export class TunnelScene {
     this.playerPaddleMesh.rotation.y = Math.max(-maxTilt, Math.min(maxTilt, -p.vx * 0.008));
     this.playerPaddleMesh.rotation.x = Math.max(-maxTilt, Math.min(maxTilt, p.vy * 0.008));
 
-    // 2. Update Ball, Wall Projections & Dynamic Lighting
+    // 2. Update Ball, Shadows, Depth Ring & Dynamic Lighting
     if (b.active) {
       this.ballMesh.visible = true;
       this.ballMesh.position.set(b.x, b.y, b.z);
       this.ballLight.position.set(b.x, b.y, b.z);
 
-      // Update 4 Wall Projections for 3D depth perception
       const hw = this.physics.halfW;
       const hh = this.physics.halfH;
-      if (this.projLeft) {
+
+      // 1. Gliding Depth Ring at current ball Z (instant visual depth gauge)
+      if (this.depthSliceGroup) {
+        this.depthSliceGroup.visible = true;
+        this.depthSliceGroup.position.set(0, 0, b.z);
+        const proximity = Math.max(0, 1 - (b.z / this.physics.tunnelDepth));
+        this.depthSliceMaterial.opacity = 0.4 + proximity * 0.45;
+      }
+
+      // 2. Floor Shadow & Vertical Drop Line
+      if (this.floorShadowGroup && this.dropLine) {
+        this.floorShadowGroup.visible = true;
+        this.floorShadowGroup.position.set(b.x, -hh + 0.02, b.z);
+
+        const heightAboveFloor = b.y - (-hh);
+        const shadowScale = Math.max(0.6, Math.min(1.8, 0.7 + (heightAboveFloor / (hh * 2)) * 0.9));
+        this.floorShadowGroup.scale.set(shadowScale, shadowScale, 1);
+        this.floorShadowCoreMat.opacity = Math.max(0.3, 0.85 - (heightAboveFloor / (hh * 2)) * 0.45);
+
+        this.dropLine.visible = true;
+        const dropPos = this.dropLine.geometry.attributes.position.array;
+        dropPos[0] = b.x;
+        dropPos[1] = b.y;
+        dropPos[2] = b.z;
+        dropPos[3] = b.x;
+        dropPos[4] = -hh + 0.02;
+        dropPos[5] = b.z;
+        this.dropLine.geometry.attributes.position.needsUpdate = true;
+      }
+
+      // 3. Wall Projections (Left, Right, Ceiling)
+      if (this.projLeft && this.projRight && this.projTop) {
         this.projLeft.visible = true;
         this.projLeft.position.set(-hw + 0.05, b.y, b.z);
+        const distLeft = (b.x - (-hw)) / (hw * 2);
+        this.projLeft.scale.setScalar(Math.max(0.6, 1.4 - distLeft * 0.9));
+
         this.projRight.visible = true;
         this.projRight.position.set(hw - 0.05, b.y, b.z);
-        this.projBottom.visible = true;
-        this.projBottom.position.set(b.x, -hh + 0.05, b.z);
+        const distRight = (hw - b.x) / (hw * 2);
+        this.projRight.scale.setScalar(Math.max(0.6, 1.4 - distRight * 0.9));
+
         this.projTop.visible = true;
         this.projTop.position.set(b.x, hh - 0.05, b.z);
+        const distTop = (hh - b.y) / (hh * 2);
+        this.projTop.scale.setScalar(Math.max(0.6, 1.4 - distTop * 0.9));
+      }
+
+      // 4. Holographic Arrival Landing Reticle (Active when ball flying towards player vz < 0)
+      if (this.arrivalGroup) {
+        if (b.vz < 0 && b.z > 0.5) {
+          this.arrivalGroup.visible = true;
+          const pred = this.physics.predictTrajectory(0);
+          if (pred && pred.finalPos) {
+            this.arrivalGroup.position.set(pred.finalPos.x, pred.finalPos.y, 0.05);
+
+            // Outer timing ring contracts as ball approaches!
+            const distRatio = Math.max(0, b.z / this.physics.tunnelDepth);
+            const ringScale = 0.4 + distRatio * 3.5;
+            this.timingRing.scale.set(ringScale, ringScale, 1);
+
+            if (b.z < 10) {
+              this.timingRingMat.color.set(0xff0055);
+              this.arrivalMat.color.set(0xff0055);
+            } else {
+              this.timingRingMat.color.set(0xfeca57);
+              this.arrivalMat.color.set(0x00f2fe);
+            }
+          }
+        } else {
+          this.arrivalGroup.visible = false;
+        }
       }
 
       // Power shot pulse
@@ -691,19 +860,21 @@ export class TunnelScene {
         this.ballMaterial.emissiveIntensity = 2.0;
         this.ballLight.intensity = 4.5;
       } else {
-        this.ballMesh.scale.setScalar(1.0);
-        this.ballMaterial.emissiveIntensity = 1.0;
-        this.ballLight.intensity = 2.5;
+        const proximity = Math.max(0, 1 - (b.z / this.physics.tunnelDepth));
+        this.ballMesh.scale.setScalar(1.0 + proximity * 0.15);
+        this.ballMaterial.emissiveIntensity = 1.0 + proximity * 0.5;
+        this.ballLight.intensity = 2.5 + proximity * 1.5;
       }
     } else {
       this.ballMesh.visible = false;
       this.ballLight.intensity = 0.2;
-      if (this.projLeft) {
-        this.projLeft.visible = false;
-        this.projRight.visible = false;
-        this.projBottom.visible = false;
-        this.projTop.visible = false;
-      }
+      if (this.depthSliceGroup) this.depthSliceGroup.visible = false;
+      if (this.floorShadowGroup) this.floorShadowGroup.visible = false;
+      if (this.dropLine) this.dropLine.visible = false;
+      if (this.projLeft) this.projLeft.visible = false;
+      if (this.projRight) this.projRight.visible = false;
+      if (this.projTop) this.projTop.visible = false;
+      if (this.arrivalGroup) this.arrivalGroup.visible = false;
     }
 
     // 3. Update Ribbon Trail
